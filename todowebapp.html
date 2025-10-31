@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TaskMaster — Professional To-Do App</title>
+
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Optional: Font Awesome for icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-gradient: linear-gradient(135deg,#0f172a,#0ea5e9 60%);
+      --card-bg: rgba(255,255,255,0.05);
+      --accent: #0ea5e9;
+      --muted: rgba(255,255,255,0.7);
+    }
+
+    body{
+      min-height:100vh;
+      background: var(--bg-gradient);
+      color: #fff;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue";
+    }
+
+    .app-shell{
+      max-width:1150px;
+      margin:32px auto;
+    }
+
+    .sidebar {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 18px;
+      min-height: 420px;
+    }
+
+    .main {
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      padding: 18px;
+      min-height: 420px;
+    }
+
+    .list-item.active {
+      background: linear-gradient(90deg, rgba(14,165,233,0.12), rgba(14,165,233,0.04));
+      border-left: 4px solid var(--accent);
+    }
+
+    .task-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+      transition: transform .08s ease;
+    }
+    .task-card:hover{ transform: translateY(-3px); }
+
+    .task-complete {
+      opacity: 0.6;
+      text-decoration: line-through;
+    }
+
+    .due-soon {
+      border-left: 4px solid #ffb454;
+      padding-left: 8px;
+    }
+
+    .due-overdue {
+      border-left: 4px solid #ff6b6b;
+      padding-left: 8px;
+    }
+
+    .small-muted { color: rgba(255,255,255,0.65); font-size: .9rem; }
+
+    .import-area { min-height: 90px; resize: vertical; }
+
+    /* responsive */
+    @media (max-width: 991px){
+      .app-shell { padding: 12px; }
+      .sidebar { margin-bottom: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container app-shell">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h2 class="mb-0">TaskMaster <small class="small-muted">— Professional To-Do</small></h2>
+        <div class="small-muted">Create lists, set due date/time, edit, and import tasks from extracted text</div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button id="exportBtn" class="btn btn-outline-light btn-sm" title="Export tasks (JSON)"><i class="fa fa-download me-1"></i> Export</button>
+        <input id="importFile" type="file" accept="application/json" class="form-control form-control-sm d-none" />
+        <button id="importBtn" class="btn btn-outline-light btn-sm" title="Import tasks (JSON)"><i class="fa fa-upload me-1"></i> Import</button>
+        <button id="clearAll" class="btn btn-danger btn-sm" title="Clear all data"><i class="fa fa-trash me-1"></i> Clear All</button>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <!-- Sidebar: Lists & Import -->
+      <div class="col-lg-3">
+        <div class="sidebar">
+          <div class="d-flex mb-2">
+            <input id="newListInput" class="form-control form-control-sm me-2" placeholder="New list name (e.g. Work)" aria-label="New list name" />
+            <button id="addListBtn" class="btn btn-sm btn-primary" title="Add list"><i class="fa fa-plus"></i></button>
+          </div>
+
+          <div class="mb-3">
+            <div class="list-group" id="listsContainer" role="tablist" aria-label="Task lists">
+              <!-- lists populated here -->
+            </div>
+          </div>
+
+          <hr class="border-light/10" />
+
+          <div class="mb-2 small-muted">Paste extracted text (from image OCR) & parse into tasks</div>
+          <textarea id="pasteText" class="form-control import-area mb-2" placeholder="Paste extracted lines here, e.g.&#10;Buy milk - 2025-10-18 09:00&#10;Call Ravi - tomorrow 10:00"></textarea>
+          <div class="d-flex gap-2">
+            <button id="parseBtn" class="btn btn-success btn-sm flex-fill">Parse & Add</button>
+            <button id="clearPaste" class="btn btn-outline-light btn-sm">Clear</button>
+          </div>
+
+          <div class="mt-3 small-muted">
+            <div><strong>Tips:</strong></div>
+            <ul class="small-muted mb-0 mt-1" style="padding-left:15px;">
+              <li>One task per line.</li>
+              <li>Optional date/time at end: <code>YYYY-MM-DD HH:MM</code> or common words like "tomorrow 9:00".</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main: Tasks -->
+      <div class="col-lg-9">
+        <div class="main">
+          <div class="row mb-3 g-2 align-items-center">
+            <div class="col-md-6">
+              <div class="input-group">
+                <input id="taskInput" class="form-control" placeholder="Add a new task..." aria-label="Add a new task" />
+                <input id="taskDue" type="datetime-local" class="form-control" style="max-width:220px;" aria-label="Task due date and time" />
+                <button id="addTaskBtn" class="btn btn-primary"><i class="fa fa-plus me-1"></i> Add</button>
+              </div>
+              <div class="small-muted mt-1">Press <kbd>Enter</kbd> to add. Select list from left to add tasks to that list.</div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="d-flex gap-2 justify-content-md-end">
+                <input id="searchInput" class="form-control form-control-sm" placeholder="Search tasks..." />
+                <select id="filterSelect" class="form-select form-select-sm" style="max-width:180px;">
+                  <option value="all">All</option>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                  <option value="duedate">Due soon</option>
+                </select>
+                <select id="sortSelect" class="form-select form-select-sm" style="max-width:160px;">
+                  <option value="created">Sort: Created</option>
+                  <option value="dueasc">Due ↑</option>
+                  <option value="duedesc">Due ↓</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="listHeader" class="mb-2">
+            <h4 class="mb-1" id="currentListTitle">All Tasks</h4>
+            <div class="small-muted" id="currentListMeta">Select or create a list from the left to start</div>
+          </div>
+
+          <div id="tasksContainer" aria-live="polite">
+            <!-- tasks will be rendered here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 small-muted text-center">Made by <strong>N Lokesh</strong> • SkillCraft Technology Internship</div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <form id="editForm" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Task</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label">Task</label>
+            <input id="editText" class="form-control" required />
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Due date & time</label>
+            <input id="editDue" type="datetime-local" class="form-control" />
+          </div>
+          <div class="form-check form-switch">
+            <input id="editCompleted" type="checkbox" class="form-check-input" />
+            <label for="editCompleted" class="form-check-label">Completed</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Save changes</button>
+          <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS + Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // ---------- Data Model & Persistence ----------
+    const STORAGE_KEY = 'taskmaster:data:v1';
+
+    // Default data
+    let data = {
+      lists: [
+        { id: uid(), name: 'Inbox', createdAt: Date.now() }
+      ],
+      tasks: [
+        // sample: { id, listId, text, createdAt, dueAt (ms|null), completed (bool) }
+      ],
+      activeListId: null
+    };
+
+    // Load existing from localStorage
+    function loadData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          data = JSON.parse(raw);
+        } else {
+          data.activeListId = data.lists[0].id;
+          saveData();
+        }
+      } catch (e) {
+        console.error('Failed to load data', e);
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function uid(prefix = '') {
+      // short unique id
+      return prefix + Math.random().toString(36).slice(2,9);
+    }
+
+    // ---------- Helpers ----------
+    function formatDateTime(ms) {
+      if (!ms) return '';
+      const d = new Date(ms);
+      // local datetime in user-friendly format
+      return d.toLocaleString();
+    }
+
+    function formatInputDatetimeValue(ms) {
+      if (!ms) return '';
+      const d = new Date(ms);
+      // returns value compatible with input[type=datetime-local]
+      const off = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - off * 60000);
+      return local.toISOString().slice(0,16);
+    }
+
+    function parseDateTimeFromString(str) {
+      // Accepts "YYYY-MM-DD HH:MM" OR "tomorrow 09:00" OR "today 14:00" or "in 2 days 10:00"
+      if (!str) return null;
+      str = str.trim();
+
+      // Pattern YYYY-MM-DD HH:MM
+      const ymd = str.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})$/);
+      if (ymd) {
+        const [,y,m,day,h,min] = ymd;
+        const dt = new Date(`${y}-${m}-${day}T${String(h).padStart(2,'0')}:${min}`);
+        return isNaN(dt) ? null : dt.getTime();
+      }
+
+      // "today 09:00" / "tomorrow 10:00"
+      const rel = str.match(/^(today|tomorrow|in\s+(\d+)\s+days)\s+(\d{1,2}):(\d{2})$/i);
+      if (rel) {
+        const when = rel[1].toLowerCase();
+        const inDaysMatch = rel[2];
+        const hour = parseInt(rel[3],10);
+        const minute = parseInt(rel[4],10);
+        let d = new Date();
+        if (when.startsWith('in') && inDaysMatch) {
+          d.setDate(d.getDate() + parseInt(inDaysMatch,10));
+        } else if (when === 'tomorrow') {
+          d.setDate(d.getDate() + 1);
+        }
+        d.setHours(hour, minute, 0, 0);
+        return d.getTime();
+      }
+
+      // Try Date parse fallback
+      const dt2 = Date.parse(str);
+      if (!isNaN(dt2)) return dt2;
+      return null;
+    }
+
+    // ---------- Rendering ----------
+    const listsContainer = document.getElementById('listsContainer');
+    const tasksContainer = document.getElementById('tasksContainer');
+    const currentListTitle = document.getElementById('currentListTitle');
+    const currentListMeta = document.getElementById('currentListMeta');
+
+    function renderLists() {
+      listsContainer.innerHTML = '';
+      data.lists.forEach(list => {
+        const active = list.id === data.activeListId;
+        const a = document.createElement('button');
+        a.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        if (active) a.classList.add('active','list-item');
+        a.setAttribute('role','tab');
+        a.innerHTML = `<span>${escapeHtml(list.name)}</span>
+          <span class="badge bg-light text-dark rounded-pill small ms-2">${countTasksForList(list.id)}</span>`;
+        a.addEventListener('click', () => {
+          data.activeListId = list.id;
+          saveData();
+          renderAll();
+        });
+
+        // Right-click to rename or delete
+        a.addEventListener('contextmenu', (ev) => {
+          ev.preventDefault();
+          showListOptions(list);
+        });
+
+        listsContainer.appendChild(a);
+      });
+    }
+
+    function countTasksForList(listId) {
+      return data.tasks.filter(t => t.listId === listId).length;
+    }
+
+    function showListOptions(list) {
+      // simple prompt for rename and delete confirmation
+      const action = prompt(`Options for "${list.name}":\nType R to rename, D to delete (all tasks will be removed)`, 'R');
+      if (!action) return;
+      if (action.toLowerCase() === 'r') {
+        const name = prompt('New list name', list.name);
+        if (name && name.trim()) {
+          list.name = name.trim();
+          saveData();
+          renderAll();
+        }
+      } else if (action.toLowerCase() === 'd') {
+        if (!confirm(`Delete list "${list.name}" and ALL its tasks?`)) return;
+        data.tasks = data.tasks.filter(t => t.listId !== list.id);
+        data.lists = data.lists.filter(l => l.id !== list.id);
+        if (data.activeListId === list.id) {
+          data.activeListId = data.lists[0] ? data.lists[0].id : null;
+        }
+        saveData();
+        renderAll();
+      }
+    }
+
+    function renderTasks() {
+      tasksContainer.innerHTML = '';
+
+      const activeListId = data.activeListId;
+      const listObj = data.lists.find(l => l.id === activeListId);
+      currentListTitle.textContent = listObj ? listObj.name : 'All Tasks';
+      currentListMeta.textContent = `Tasks: ${countTasksForList(activeListId)} • Created ${new Date(listObj?.createdAt || Date.now()).toLocaleDateString()}`;
+
+      let tasks = data.tasks.filter(t => t.listId === activeListId);
+
+      // filters
+      const filter = document.getElementById('filterSelect').value;
+      const search = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+
+      if (filter === 'active') tasks = tasks.filter(t => !t.completed);
+      else if (filter === 'completed') tasks = tasks.filter(t => t.completed);
+      else if (filter === 'duedate') {
+        // due soon (within 48 hours)
+        const now = Date.now();
+        tasks = tasks.filter(t => t.dueAt && (t.dueAt - now) <= (48 * 3600 * 1000) && (t.dueAt - now) >= 0);
+      }
+
+      if (search) {
+        tasks = tasks.filter(t => t.text.toLowerCase().includes(search));
+      }
+
+      // sort
+      const sort = document.getElementById('sortSelect').value;
+      if (sort === 'dueasc') {
+        tasks.sort((a,b) => (a.dueAt||Infinity) - (b.dueAt||Infinity));
+      } else if (sort === 'duedesc') {
+        tasks.sort((a,b) => (b.dueAt||0) - (a.dueAt||0));
+      } else {
+        tasks.sort((a,b) => b.createdAt - a.createdAt); // newest first
+      }
+
+      if (tasks.length === 0) {
+        tasksContainer.innerHTML = `<div class="small-muted">No tasks here. Add one using the input above or parse from text.</div>`;
+        return;
+      }
+
+      const now = Date.now();
+
+      tasks.forEach((t, idx) => {
+        const el = document.createElement('div');
+        el.className = 'task-card d-flex align-items-start justify-content-between';
+        if (t.completed) el.classList.add('task-complete');
+        // due styling
+        if (t.dueAt) {
+          if (t.dueAt < now) el.classList.add('due-overdue');
+          else if (t.dueAt - now < 24*3600*1000) el.classList.add('due-soon');
+        }
+
+        el.innerHTML = `
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-start justify-content-between">
+              <div>
+                <div class="fw-semibold">${escapeHtml(t.text)}</div>
+                <div class="small-muted mt-1">${t.dueAt ? formatDateTime(t.dueAt) : '<span class="text-muted">No due date</span>'}</div>
+              </div>
+              <div class="ms-3 text-end small-muted">
+                <div>${new Date(t.createdAt).toLocaleString()}</div>
+                <div class="mt-2"><span class="badge bg-${t.completed ? 'success' : 'secondary'}">${t.completed ? 'Done' : 'Pending'}</span></div>
+              </div>
+            </div>
+            <div class="mt-2 small text-muted">List: ${escapeHtml(getListName(t.listId))}</div>
+          </div>
+
+          <div class="ms-3 d-flex flex-column align-items-end">
+            <div class="btn-group mb-2" role="group" aria-label="task controls">
+              <button class="btn btn-sm btn-outline-light toggle-complete" data-id="${t.id}" title="Toggle complete"><i class="fa ${t.completed ? 'fa-undo' : 'fa-check'}"></i></button>
+              <button class="btn btn-sm btn-outline-light edit-task" data-id="${t.id}" title="Edit"><i class="fa fa-pen"></i></button>
+              <button class="btn btn-sm btn-outline-danger delete-task" data-id="${t.id}" title="Delete"><i class="fa fa-trash"></i></button>
+            </div>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-light move-up" data-id="${t.id}" title="Move up"><i class="fa fa-arrow-up"></i></button>
+              <button class="btn btn-sm btn-light move-down" data-id="${t.id}" title="Move down"><i class="fa fa-arrow-down"></i></button>
+            </div>
+          </div>
+        `;
+
+        tasksContainer.appendChild(el);
+      });
+
+      // attach actions
+      document.querySelectorAll('.toggle-complete').forEach(b => b.addEventListener('click', (ev) => {
+        const id = ev.currentTarget.dataset.id;
+        toggleComplete(id);
+      }));
+      document.querySelectorAll('.delete-task').forEach(b => b.addEventListener('click', (ev) => {
+        const id = ev.currentTarget.dataset.id;
+        deleteTask(id);
+      }));
+      document.querySelectorAll('.edit-task').forEach(b => b.addEventListener('click', (ev) => {
+        const id = ev.currentTarget.dataset.id;
+        openEditModal(id);
+      }));
+      document.querySelectorAll('.move-up').forEach(b => b.addEventListener('click', (ev) => {
+        moveTask(ev.currentTarget.dataset.id, -1);
+      }));
+      document.querySelectorAll('.move-down').forEach(b => b.addEventListener('click', (ev) => {
+        moveTask(ev.currentTarget.dataset.id, 1);
+      }));
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+    }
+
+    function getListName(id) {
+      return data.lists.find(l => l.id === id)?.name || 'Inbox';
+    }
+
+    // ---------- Task actions ----------
+    function addList(name) {
+      const clean = (name||'').trim();
+      if (!clean) return;
+      const id = uid('L_');
+      data.lists.push({ id, name: clean, createdAt: Date.now() });
+      data.activeListId = id;
+      saveData();
+      renderAll();
+    }
+
+    function addTask(text, dueAt = null) {
+      const t = (text||'').trim();
+      if (!t) return;
+      const task = {
+        id: uid('T_'),
+        listId: data.activeListId || (data.lists[0] && data.lists[0].id),
+        text: t,
+        createdAt: Date.now(),
+        dueAt: dueAt || null,
+        completed: false
+      };
+      data.tasks.unshift(task);
+      saveData();
+      renderAll();
+    }
+
+    function toggleComplete(id) {
+      const t = data.tasks.find(x => x.id === id);
+      if (!t) return;
+      t.completed = !t.completed;
+      saveData();
+      renderTasks();
+    }
+
+    function deleteTask(id) {
+      if (!confirm('Delete this task?')) return;
+      data.tasks = data.tasks.filter(x => x.id !== id);
+      saveData();
+      renderTasks();
+    }
+
+    function moveTask(id, dir) {
+      const idx = data.tasks.findIndex(x => x.id === id);
+      if (idx === -1) return;
+      const newIndex = idx + dir;
+      if (newIndex < 0 || newIndex >= data.tasks.length) return;
+      const item = data.tasks.splice(idx,1)[0];
+      data.tasks.splice(newIndex,0,item);
+      saveData();
+      renderTasks();
+    }
+
+    // ---------- Edit Modal ----------
+    const editModalEl = document.getElementById('editModal');
+    const editModal = new bootstrap.Modal(editModalEl);
+    const editForm = document.getElementById('editForm');
+    let editingTaskId = null;
+
+    function openEditModal(id) {
+      const t = data.tasks.find(x => x.id === id);
+      if (!t) return;
+      editingTaskId = id;
+      document.getElementById('editText').value = t.text;
+      document.getElementById('editDue').value = formatInputDatetimeValue(t.dueAt);
+      document.getElementById('editCompleted').checked = !!t.completed;
+      editModal.show();
+    }
+
+    editForm.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const t = data.tasks.find(x => x.id === editingTaskId);
+      if (!t) return;
+      t.text = document.getElementById('editText').value.trim();
+      const dueVal = document.getElementById('editDue').value;
+      t.dueAt = dueVal ? new Date(dueVal).getTime() : null;
+      t.completed = document.getElementById('editCompleted').checked;
+      saveData();
+      editModal.hide();
+      renderAll();
+    });
+
+    // ---------- Parsing pasted text into tasks ----------
+    function parseAndAddFromText(rawText) {
+      // Each line => attempt to parse "task - dateSpec"
+      const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (lines.length === 0) return 0;
+      let added = 0;
+      lines.forEach(line => {
+        // try to split on ' - ' or ' | '
+        let parts = line.split(/\s-\s|\s\|\s/);
+        if (parts.length === 1) {
+          // maybe last token is a date? try find last occurrence of date-like substring
+          const dtMatch = line.match(/(\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2})$/);
+          if (dtMatch) {
+            parts = [line.slice(0, dtMatch.index).trim(), dtMatch[0]];
+          } else {
+            // fallback: split by last dash
+            const lastDash = line.lastIndexOf('-');
+            if (lastDash > 0) {
+              parts = [line.slice(0,lastDash).trim(), line.slice(lastDash+1).trim()];
+            } else {
+              parts = [line];
+            }
+          }
+        }
+        const text = parts[0].trim();
+        const dateStr = parts[1] ? parts[1].trim() : '';
+        const dt = parseDateTimeFromString(dateStr);
+        if (text) {
+          addTask(text, dt);
+          added++;
+        }
+      });
+      return added;
+    }
+
+    // ---------- Export / Import ----------
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'taskmaster-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+
+    document.getElementById('importFile').addEventListener('change', (ev) => {
+      const f = ev.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const obj = JSON.parse(r.result);
+          if (confirm('Replace current data with imported data? Click Cancel to merge instead.')) {
+            data = obj;
+          } else {
+            // merge: naive merge by pushing lists/tasks not present (based on id)
+            (obj.lists||[]).forEach(l => { if (!data.lists.find(x=>x.id===l.id)) data.lists.push(l); });
+            (obj.tasks||[]).forEach(t => { if (!data.tasks.find(x=>x.id===t.id)) data.tasks.push(t); });
+          }
+          saveData();
+          renderAll();
+          alert('Import successful');
+        } catch (e) {
+          alert('Invalid JSON file');
+        }
+      };
+      r.readAsText(f);
+      ev.target.value = '';
+    });
+
+    // ---------- Attach UI events ----------
+    document.getElementById('addListBtn').addEventListener('click', () => {
+      const v = document.getElementById('newListInput').value;
+      if (v.trim()) { addList(v.trim()); document.getElementById('newListInput').value = ''; }
+    });
+
+    document.getElementById('addTaskBtn').addEventListener('click', () => {
+      const text = document.getElementById('taskInput').value;
+      const dueVal = document.getElementById('taskDue').value;
+      const due = dueVal ? new Date(dueVal).getTime() : null;
+      if (text.trim()) {
+        addTask(text, due);
+        document.getElementById('taskInput').value = '';
+        document.getElementById('taskDue').value = '';
+      }
+    });
+
+    // Enter to add task
+    document.getElementById('taskInput').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        document.getElementById('addTaskBtn').click();
+      }
+    });
+
+    document.getElementById('parseBtn').addEventListener('click', () => {
+      const raw = document.getElementById('pasteText').value;
+      const added = parseAndAddFromText(raw);
+      if (added > 0) {
+        document.getElementById('pasteText').value = '';
+        alert(`Added ${added}, 
+        
+           s`);
+      } else {
+        alert('No tasks found to add. Ensure one task per line.');
+      }
+    });
+
+    document.getElementById('clearPaste').addEventListener('click', () => {
+      document.getElementById('pasteText').value = '';
+    });
+
+    document.getElementById('searchInput').addEventListener('input', () => renderTasks());
+    document.getElementById('filterSelect').addEventListener('change', () => renderTasks());
+    document.getElementById('sortSelect').addEventListener('change', () => renderTasks());
+
+    document.getElementById('clearAll').addEventListener('click', () => {
+      if (!confirm('Clear ALL lists and tasks?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      location.reload();
+    });
+
+    // ---------- Init ----------
+    loadData();
+    // ensure there's an active list
+    if (!data.activeListId) data.activeListId = data.lists[0]?.id;
+    function renderAll() {
+      renderLists();
+      renderTasks();
+      saveData();
+    }
+    renderAll();
+
+    // accessibility: keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        document.getElementById('searchInput').focus();
+      }
+    });
+
+    // Utility: check overdue reminders on load (non-intrusive)
+    (function checkDueSoon(){
+      const now = Date.now();
+      const soon = data.tasks.filter(t => t.dueAt && !t.completed && (t.dueAt - now) <= 3600*1000 && (t.dueAt - now) > 0);
+      if (soon.length) {
+        // show a subtle toast (simple alert for now)
+        console.info('Tasks due within 1 hour:', soon.map(s => s.text));
+      }
+    })();
+
+    // ---------- End ----------
+  </script>
+</body>
+</html>
